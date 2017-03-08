@@ -1,6 +1,10 @@
+import os
 import numpy as np
 from scipy.io import loadmat
 import matplotlib.pyplot as plt
+import eval
+
+val_type = '75s'
 
 def lms(x, m, lr):
     N = x.shape[0]
@@ -47,15 +51,7 @@ def detect_manatee(x, w_call, w_noise):
     J_noise = smooth(J_noise)
     return J_call, J_noise
 
-
-if __name__ == '__main__':
-    audio = loadmat(r'D:\work\Course\EEL6935 Deep Learning\Assignments\Project1\manatee_signals.mat')
-    train_signal = audio['train_signal'][:, 0]
-    noise_signal = audio['noise_signal'][:, 0]
-    test_signal = audio['test_signal'][:, 0]
-
-    # plt.plot(train_signal)
-
+def train_filter():
     filter_orders = [2, 6, 15, 30, 50, 80, 100]
     filter_order = 15
     w_train, x_train, J_train = lms(train_signal, filter_order, 0.01)
@@ -64,22 +60,81 @@ if __name__ == '__main__':
     w_noise, x_noise, J_noise = lms(noise_signal, filter_order, 0.01)
     # plt.plot(x_noise)
 
-    J_call, J_noise = detect_manatee(test_signal, w_train, w_noise)
+    return w_train, w_noise
 
-    # plt.figure()
-    # plt.plot(J_call); plt.ylim([0, 0.5])
-    # plt.figure()
-    # plt.plot(J_noise); plt.ylim([0, 0.5])
-    plt.figure()
-    plt.plot(J_noise - J_call)
+def run_validation_set(w_train, w_noise, val_type):
+    if val_type is '75s':
+        with open(r'resources\validation_75s.npy', 'rb') as f:
+            x = np.load(f)
+        with open(r'resources\ground_truth_val_75s.npy', 'rb') as f:
+            dict = np.load(f).item()
+            low = dict['low']
+            high = dict['high']
+    else:
+        with open(r'resources\validation_25s.npy', 'rb') as f:
+            x = np.load(f)
+        with open(r'resources\ground_truth_val_25s.npy', 'rb') as f:
+            dict = np.load(f).item()
+            low = dict['low']
+            high = dict['high']
 
-    plt.show()
+    J_call, J_noise = detect_manatee(x, w_train, w_noise)
+    # eval.plot_cost(J_call)
+    # eval.plot_cost(J_noise)
+    J_diff = J_noise - J_call
 
+    # eval.plot_calls(J_diff)
+    acc = eval.get_accuracy(J_diff, low, high)
+
+def run_test_set(test_signal, w_train, w_noise):
+    with open(r'resources\test_signal.npy', 'rb') as f:
+        x = np.load(f)
+    with open(r'resources\ground_truth_test.npy', 'rb') as f:
+        dict = np.load(f).item()
+
+    if 1:
+        low = dict['low'][dict['idx_regular']]
+        high = dict['high'][dict['idx_regular']]
+    else:
+        low = dict['low'][dict['idx_all']]
+        high = dict['high'][dict['idx_all']]
+
+    J_call, J_noise = detect_manatee(x, w_train, w_noise)
+    # eval.plot_cost(J_call)
+    # eval.plot_cost(J_noise)
+    J_diff = J_noise - J_call
+
+    # eval.plot_calls(J_diff)
+    acc = eval.get_accuracy(J_diff, low, high)
+
+
+if __name__ == '__main__':
+    audio = loadmat(r'resources\manatee_signals.mat')
+    train_signal = audio['train_signal'][:, 0]
+    noise_signal = audio['noise_signal'][:, 0]
+    test_signal = audio['test_signal'][:, 0]
+    # plt.plot(train_signal)
+
+    if 1:
+        with open(r'resources\lms_weights.npy', 'rb') as f:
+            dict = np.load(f).item()
+        w_train = dict['w_train']
+        w_noise = dict['w_noise']
+    else:
+        w_train, w_noise = train_filter()
+        weights = {'w_train': w_train, 'w_noise': w_noise}
+        np.save(r'resources\lms_weights.npy', weights)
+
+    # Parameter tuning using a validation set
+    if 0:
+        run_validation_set(w_train, w_noise, val_type)
+
+    # Testing
+    if 1:
+        run_test_set(test_signal, w_train, w_noise)
 
 def train():
     # All units in seconds
-    low = [2.0, 4.274, 6.562, 8.837, 11.192, 13.495, 15.785, 18.076, 20.508, 22.834]
-    high = [2.274, 4.563, 6.837, 9.192, 11.495, 13.785, 16.076, 18.508, 20.834, 23.073]
     mean_length = 0.3074
     std_dev = 0.0509
 
