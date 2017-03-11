@@ -51,9 +51,13 @@ def detect_manatee(x, w_call, w_noise):
     J_noise = smooth(J_noise)
     return J_call, J_noise
 
-def train_filter():
-    filter_orders = [2, 6, 15, 30, 50, 80, 100]
-    filter_order = 15
+def train_filter(filter_order):
+    # Load train signal
+    with open(r'resources\train_signal.npy', 'rb') as f:
+        train_signal = np.load(f)
+    with open(r'resources\noise_signal.npy', 'rb') as f:
+        noise_signal = np.load(f)
+
     w_train, x_train, J_train = lms(train_signal, filter_order, 0.01)
     # plt.plot(x_train)
 
@@ -93,7 +97,9 @@ def run_validation_set(w_train, w_noise, val_type):
     if 1:
         eval.get_pr_curve(J_diff, low, high)
 
-def run_test_set(w_train, w_noise):
+def run_test_set(w_train, w_noise, get_auc=False):
+    acc = auc = -1
+
     with open(r'resources\test_signal.npy', 'rb') as f:
         x = np.load(f)
     with open(r'resources\ground_truth_test.npy', 'rb') as f:
@@ -125,26 +131,53 @@ def run_test_set(w_train, w_noise):
         eval.get_pr_curve(J_diff, gt_low, gt_high)
 
     if 1:
-        eval.get_roc_curve(J_diff, gt_signal)
+        dict_roc = eval.get_roc_curve(J_diff, gt_signal, plot_curve=False)
+        auc = dict_roc['auc']
+
+    test_result = {'auc': auc, 'acc': acc}
+    return test_result
 
 if __name__ == '__main__':
-    if 1:
-        print('Getting stored weights...')
-        with open(r'resources\lms_weights.npy', 'rb') as f:
-            dict = np.load(f).item()
-        w_train = dict['w_train']
-        w_noise = dict['w_noise']
-    else:
-        print('Computing weights...')
-        w_train, w_noise = train_filter()
-        weights = {'w_train': w_train, 'w_noise': w_noise}
-        np.save(r'resources\lms_weights.npy', weights)
+    filter_orders = [15] # [1, 2, 4, 7, 10, 15, 20, 35, 50]
+    plot_auc = True
 
-    # Parameter tuning using a validation set
-    if 0:
-        run_validation_set(w_train, w_noise, val_type)
+    auc = np.empty(len(filter_orders))
 
-    # Testing
-    if 1:
-        run_test_set(w_train, w_noise)
+    for i, filter_order in enumerate(filter_orders):
+        w_train = w_noise = None
+        weights_file = r'resources\lms_weights_w'+str(filter_order)+'.npy'
+        if os.path.exists(weights_file):
+            print('Filter order: {0:d} Getting stored weights...'.format(filter_order))
+            with open(weights_file, 'rb') as f:
+                dict = np.load(f).item()
+            w_train = dict['w_train']
+            w_noise = dict['w_noise']
+        else:
+            print('Filter order: {0:d} Computing weights...'.format(filter_order))
+            w_train, w_noise = train_filter(filter_order)
+            weights = {'w_train': w_train, 'w_noise': w_noise}
+            np.save(weights_file, weights)
 
+        # Parameter tuning using a validation set
+        if 0:
+            run_validation_set(w_train, w_noise, val_type)
+
+        # Testing
+        if 0:
+            run_test_set(w_train, w_noise)
+
+        # Testing while plotting AUC
+        if plot_auc:
+            test_result = run_test_set(w_train, w_noise, get_auc=True)
+            auc[i] = test_result['auc']
+
+    if plot_auc:
+        plt.figure()
+        lw = 2 #linewidth
+        plt.plot(filter_orders, auc, color='red',lw=lw)
+        plt.xlim([1, max(filter_orders)])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('Filter Order')
+        plt.ylabel('AUC')
+        plt.title('AUC vs Filter Order')
+        plt.show()
