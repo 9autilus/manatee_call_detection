@@ -4,7 +4,7 @@ from scipy.io import loadmat
 import matplotlib.pyplot as plt
 import eval
 
-val_type = '75s'
+val_type = '25s'
 
 def lms(x, m, lr):
     N = x.shape[0]
@@ -63,6 +63,7 @@ def train_filter():
     return w_train, w_noise
 
 def run_validation_set(w_train, w_noise, val_type):
+    print('Loading validation data...')
     if val_type is '75s':
         with open(r'resources\validation_75s.npy', 'rb') as f:
             x = np.load(f)
@@ -78,49 +79,63 @@ def run_validation_set(w_train, w_noise, val_type):
             low = dict['low']
             high = dict['high']
 
+    print('Detecting manatee calls...')
     J_call, J_noise = detect_manatee(x, w_train, w_noise)
     # eval.plot_cost(J_call)
     # eval.plot_cost(J_noise)
     J_diff = J_noise - J_call
 
     # eval.plot_calls(J_diff)
-    acc = eval.get_accuracy(J_diff, low, high)
 
-def run_test_set(test_signal, w_train, w_noise):
+    if 0:
+        acc = eval.get_accuracy(J_diff, low, high)
+
+    if 1:
+        eval.get_pr_curve(J_diff, low, high)
+
+def run_test_set(w_train, w_noise):
     with open(r'resources\test_signal.npy', 'rb') as f:
         x = np.load(f)
     with open(r'resources\ground_truth_test.npy', 'rb') as f:
         dict = np.load(f).item()
+    with open(r'resources\ground_truth_test_signal.npy', 'rb') as f:
+        dict_signal = np.load(f).item()
 
     if 1:
-        low = dict['low'][dict['idx_regular']]
-        high = dict['high'][dict['idx_regular']]
+        gt_low = dict['low'][dict['idx_regular']]
+        gt_high = dict['high'][dict['idx_regular']]
+        gt_signal = dict_signal['regular']
     else:
-        low = dict['low'][dict['idx_all']]
-        high = dict['high'][dict['idx_all']]
+        gt_low = dict['low'][dict['idx_all']]
+        gt_high = dict['high'][dict['idx_all']]
+        gt_signal = dict_signal['all']
 
     J_call, J_noise = detect_manatee(x, w_train, w_noise)
     # eval.plot_cost(J_call)
     # eval.plot_cost(J_noise)
     J_diff = J_noise - J_call
 
-    # eval.plot_calls(J_diff)
-    acc = eval.get_accuracy(J_diff, low, high)
+    if 0:
+        eval.plot_calls(J_diff)
 
+    if 0:
+        acc = eval.get_accuracy(J_diff, gt_low, gt_high)
 
-if __name__ == '__main__':
-    audio = loadmat(r'resources\manatee_signals.mat')
-    train_signal = audio['train_signal'][:, 0]
-    noise_signal = audio['noise_signal'][:, 0]
-    test_signal = audio['test_signal'][:, 0]
-    # plt.plot(train_signal)
+    if 0:
+        eval.get_pr_curve(J_diff, gt_low, gt_high)
 
     if 1:
+        eval.get_roc_curve(J_diff, gt_signal)
+
+if __name__ == '__main__':
+    if 1:
+        print('Getting stored weights...')
         with open(r'resources\lms_weights.npy', 'rb') as f:
             dict = np.load(f).item()
         w_train = dict['w_train']
         w_noise = dict['w_noise']
     else:
+        print('Computing weights...')
         w_train, w_noise = train_filter()
         weights = {'w_train': w_train, 'w_noise': w_noise}
         np.save(r'resources\lms_weights.npy', weights)
@@ -131,39 +146,5 @@ if __name__ == '__main__':
 
     # Testing
     if 1:
-        run_test_set(test_signal, w_train, w_noise)
+        run_test_set(w_train, w_noise)
 
-def train():
-    # All units in seconds
-    mean_length = 0.3074
-    std_dev = 0.0509
-
-'''
-    if plot_type == 0:
-        x_valid = x_win[m + 1:window_size]
-        input_power = dot(x_valid, x_valid)/(window_size - m)
-        mse = mean(J(m + 1:window_size))
-        nmse = mse / input_power
-        print('{0:f} '.format(nmse))
-    elif plot_type == 1:
-        figure, hold
-        on
-        title('Original vs Predicted signal')
-        plot(x_win)
-        plot(x_pred)
-        hold
-        off
-        legend('Original', 'Predicted')
-        xlabel('Samples -->')
-        ylabel('Signal Strength -->')
-        % soundsc(x_pred)
-        % axis([1, window_size, -10, 10])
-    elif plot_type == 2:
-        plot(J)
-        disp(J(1: 20)')
-        disp(max(J))
-        % axis([1, window_size, 0, 10])
-
-    if (plot_type == 0):
-        fprintf('\n')
-'''
