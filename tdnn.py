@@ -1,94 +1,17 @@
 import os
 import numpy as np
-from scipy.io import loadmat
 import matplotlib.pyplot as plt
 import eval
 import argparse
 
 from keras.models import Sequential, Model, load_model
-from keras.layers import Input, Convolution1D, MaxPooling1D, Dense, Flatten, Lambda, Merge
+from keras.layers import Convolution1D, Dense, Flatten
 from keras.optimizers import RMSprop
 from keras.callbacks import ModelCheckpoint
+from keras.utils.visualize_util import plot
 
 val_type = '25s'
 default_store_model = 'model.h5'
-
-def smooth(x):
-    box_pts = 100
-    box = np.ones(box_pts)/box_pts
-    x_smooth = np.convolve(x, box, mode='same')
-    return x_smooth
-
-def run_validation_set(w_train, w_noise, val_type):
-    print('Loading validation data...')
-    if val_type is '75s':
-        with open(r'resources\validation_75s.npy', 'rb') as f:
-            x = np.load(f)
-        with open(r'resources\ground_truth_val_75s.npy', 'rb') as f:
-            dict = np.load(f).item()
-            low = dict['low']
-            high = dict['high']
-    else:
-        with open(r'resources\validation_25s.npy', 'rb') as f:
-            x = np.load(f)
-        with open(r'resources\ground_truth_val_25s.npy', 'rb') as f:
-            dict = np.load(f).item()
-            low = dict['low']
-            high = dict['high']
-
-    print('Detecting manatee calls...')
-    J_call, J_noise = detect_manatee(x, w_train, w_noise)
-    # eval.plot_cost(J_call)
-    # eval.plot_cost(J_noise)
-    J_diff = J_noise - J_call
-
-    # eval.plot_calls(J_diff)
-
-    if 0:
-        acc = eval.get_accuracy(J_diff, low, high)
-
-    if 1:
-        eval.get_pr_curve(J_diff, low, high)
-
-def run_test_set(w_train, w_noise, get_auc=False):
-    acc = auc = -1
-
-    with open(r'resources\test_signal.npy', 'rb') as f:
-        x = np.load(f)
-    with open(r'resources\ground_truth_test.npy', 'rb') as f:
-        dict = np.load(f).item()
-    with open(r'resources\ground_truth_test_signal.npy', 'rb') as f:
-        dict_signal = np.load(f).item()
-
-    if 1:
-        gt_low = dict['low'][dict['idx_regular']]
-        gt_high = dict['high'][dict['idx_regular']]
-        gt_signal = dict_signal['regular']
-    else:
-        gt_low = dict['low'][dict['idx_all']]
-        gt_high = dict['high'][dict['idx_all']]
-        gt_signal = dict_signal['all']
-
-    J_call, J_noise = detect_manatee(x, w_train, w_noise)
-    # eval.plot_cost(J_call)
-    # eval.plot_cost(J_noise)
-    J_diff = J_noise - J_call
-
-    if 0:
-        eval.plot_calls(J_diff)
-
-    if 0:
-        acc = eval.get_accuracy(J_diff, gt_low, gt_high)
-
-    if 0:
-        eval.get_pr_curve(J_diff, gt_low, gt_high)
-
-    if 1:
-        dict_roc = eval.get_roc_curve(J_diff, gt_signal, plot_curve=False)
-        auc = dict_roc['auc']
-
-    test_result = {'auc': auc, 'acc': acc}
-    return test_result
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -116,9 +39,9 @@ def create_model(window_size):
     input_shape = (window_size, 1)
     model = Sequential()
     model.add(Convolution1D(8, 5, activation='relu', border_mode='valid', input_shape=input_shape))
-    # model.add(Convolution1D(16, 5, activation='relu', border_mode='valid'))
-    # model.add(Convolution1D(32, 5, activation='relu', border_mode='valid'))
-    # model.add(Convolution1D(64, 5, activation='relu', border_mode='valid'))
+    model.add(Convolution1D(16, 5, activation='relu', border_mode='valid'))
+    model.add(Convolution1D(32, 5, activation='relu', border_mode='valid'))
+    model.add(Convolution1D(64, 5, activation='relu', border_mode='valid'))
     model.add(Flatten())
     model.add(Dense(512, activation='sigmoid'))
     model.add(Dense(1, activation='sigmoid'))
@@ -155,7 +78,7 @@ def get_batch(x_full, gt_full, window_size, stride_size, batch_size):
         if x_idx + window_size < len(x_full):
             x[i] = x_full[x_idx:x_idx+window_size].reshape(window_size, 1)
             gt = gt_full[x_idx:x_idx+window_size]
-            y[i] = np.any(gt == 1)
+            y[i] = np.any(gt == 1.).astype('float32')
             i += 1
             x_idx += stride_size
             if i == batch_size:
@@ -163,6 +86,30 @@ def get_batch(x_full, gt_full, window_size, stride_size, batch_size):
                 yield (x, y)
         else:
             x_idx = 0
+
+def test_generator(x_full, gt_full):
+    batch_size = 32
+    window_size = 100
+    stride_size = window_size
+
+    plt.figure()
+    plt.plot(gt_full)
+
+    num_batches = int(np.ceil(len(x_full)/stride_size + batch_size - 1)/batch_size)
+    # x_array = np.ones
+    y_array = np.ones(num_batches * batch_size)
+    gen = get_batch(x_full, gt_full, window_size, stride_size, batch_size)
+
+    idx = 0
+    for i in range(num_batches):
+        x, y = next(gen)
+        y_array[idx:idx+batch_size] = y
+        idx += batch_size
+
+    plt.figure()
+    plt.plot(y_array)
+    plt.show()
+
 
 def train_net(cfg, x, gt_signa):
     batch_size = cfg['batch_size']
@@ -195,6 +142,10 @@ def test_net(cfg, x_test, gt_signal):
 
     model = load_model(cfg['model_file'])
 
+    if 0:
+        plot(model, to_file=r'temp\model_tdnn_00.png')
+        exit(0)
+
     num_batches = int(np.ceil(len(x_test)/stride_size + batch_size - 1)/batch_size)
     gen = get_batch(x_test, gt_signal, window_size, stride_size, batch_size)
 
@@ -206,14 +157,15 @@ def test_net(cfg, x_test, gt_signal):
         print("\rPredicting batch id: {0:d}/{1:d}".format(i, num_batches-1), end='')
         x, y = next(gen)
         y_pred = model.predict_on_batch(x)
-        y_array[i:i+batch_size] = y
-        y_pred_array[i:i+batch_size] = y_pred.reshape(batch_size)
-        i += batch_size
+        y_array[idx:idx+batch_size] = y
+        y_pred_array[idx:idx+batch_size] = y_pred.reshape(batch_size)
+        idx += batch_size
     print('\n')
 
     if 1:
         dict_roc = eval.get_roc_curve(y_pred_array, y_array, plot_curve=True)
         auc = dict_roc['auc']
+
 
 if __name__ == '__main__':
     args = parse_arguments()
@@ -230,6 +182,7 @@ if __name__ == '__main__':
         with open(r'resources\ground_truth_val_25s_signal.npy', 'rb') as f:
             gt_signal = np.load(f)
 
+        # test_generator(x, gt_signal)
         train_net(cfg, x, gt_signal)
     else:
         cfg['batch_size'] = 32
@@ -237,7 +190,8 @@ if __name__ == '__main__':
         with open(r'resources\test_signal.npy', 'rb') as f:
             x_test = np.load(f)
         with open(r'resources\ground_truth_test_signal.npy', 'rb') as f:
-            gt_signal = np.load(f).item()['regular']
+            dict = np.load(f).item()
+            gt_signal = dict['regular']
 
         test_net(cfg, x_test, gt_signal)
 
