@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import eval
 import argparse
+import time
 
 from keras.models import Sequential, Model, load_model
 from keras.layers import Convolution1D, Dense, Flatten
@@ -162,12 +163,13 @@ def test_net(cfg, x_test, gt_signal):
         idx += batch_size
     print('\n')
 
-    if 1:
+    if 0:
         dict_roc = eval.get_roc_curve(y_pred_array, y_array, plot_curve=True)
         auc = dict_roc['auc']
 
 
 if __name__ == '__main__':
+    start = time.time()
     args = parse_arguments()
 
     cfg = {}
@@ -194,6 +196,9 @@ if __name__ == '__main__':
             gt_signal = dict['regular']
 
         test_net(cfg, x_test, gt_signal)
+
+    end = time.time()
+    print('Time taken: ', end - start)
 
 
 

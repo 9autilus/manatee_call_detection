@@ -106,20 +106,5 @@ def get_roc_curve(J, gt, plot_curve=False):
     fpr, tpr, thresholds = metrics.roc_curve(gt, J)
     roc_auc = metrics.auc(fpr, tpr)
 
-    if plot_curve:
-        plt.figure()
-        lw = 2 #linewidth
-        plt.plot(fpr, tpr, color='darkorange',lw=lw, label='ROC curve (area = %0.2f)' % roc_auc)
-        plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title('ROC curve')
-        plt.legend(loc="lower right")
-        plt.show()
-    else:
-        print('AUC: {0:.2f}'.format(roc_auc))
-
     dict = {'fpr': fpr, 'tpr': tpr, 'thresholds': thresholds, 'auc': roc_auc}
     return dict
